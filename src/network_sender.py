@@ -10,7 +10,8 @@ import logging
 import time
 from typing import Dict, List, Optional
 from datetime import datetime
-from threading import Thread, Queue, Lock
+from threading import Thread, Lock
+from queue import Queue
 import urllib3
 
 # Disable SSL warnings for self-signed certificates (optional)

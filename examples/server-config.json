@@ -1,0 +1,23 @@
+{
+  "output_mode": "server",
+  "server_url": "https://your-management-server.com/api/secu-beat/logs",
+  "server_token": "your-bearer-token-here",
+  "verify_ssl": true,
+  "batch_size": 20,
+  "timeout": 30,
+  "retry_attempts": 5,
+  "retry_delay": 3,
+  "included_users": ["*"],
+  "excluded_users": ["root", "systemd"],
+  "included_commands": ["*"],
+  "excluded_commands": ["ls", "pwd", "whoami", "ps"],
+  "included_ips": ["*"],
+  "excluded_ips": ["127.0.0.1"],
+  "log_level": "INFO",
+  "enable_audit_rules": true,
+  "monitor_interval": 1,
+  "cleanup_interval": 300,
+  "require_root": true,
+  "max_events_memory": 1000,
+  "max_log_file_size": 100
+} 

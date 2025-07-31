@@ -42,13 +42,35 @@ setup_venv() {
 # Copy files
 copy_files() {
     echo "Setting up SecuBeat..."
-    mkdir -p "$INSTALL_DIR"
-    cp -r "$SCRIPT_DIR/src" "$INSTALL_DIR/"
-    cp "$SCRIPT_DIR/secu-beat.py" "$INSTALL_DIR/"
-    cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"
-    cp "$SCRIPT_DIR/config.json" "$INSTALL_DIR/"
     
-    chmod +x "$INSTALL_DIR/secu-beat.py"
+    # Check if we're already in the target directory
+    if [ "$SCRIPT_DIR" = "$INSTALL_DIR" ]; then
+        echo "Already running from target directory: $INSTALL_DIR"
+        # Just ensure the directory exists and files are executable
+        chmod +x "$INSTALL_DIR/secu-beat.py" 2>/dev/null || true
+    else
+        # Create target directory and copy files
+        mkdir -p "$INSTALL_DIR"
+        
+        # Copy files only if source and destination are different
+        if [ -d "$SCRIPT_DIR/src" ] && [ "$SCRIPT_DIR/src" != "$INSTALL_DIR/src" ]; then
+            cp -r "$SCRIPT_DIR/src" "$INSTALL_DIR/"
+        fi
+        
+        if [ -f "$SCRIPT_DIR/secu-beat.py" ] && [ "$SCRIPT_DIR/secu-beat.py" != "$INSTALL_DIR/secu-beat.py" ]; then
+            cp "$SCRIPT_DIR/secu-beat.py" "$INSTALL_DIR/"
+        fi
+        
+        if [ -f "$SCRIPT_DIR/requirements.txt" ] && [ "$SCRIPT_DIR/requirements.txt" != "$INSTALL_DIR/requirements.txt" ]; then
+            cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"
+        fi
+        
+        if [ -f "$SCRIPT_DIR/config.json" ] && [ "$SCRIPT_DIR/config.json" != "$INSTALL_DIR/config.json" ]; then
+            cp "$SCRIPT_DIR/config.json" "$INSTALL_DIR/"
+        fi
+        
+        chmod +x "$INSTALL_DIR/secu-beat.py"
+    fi
 }
 
 # Create wrapper script
@@ -64,14 +86,27 @@ EOF
     chmod +x "$INSTALL_DIR/run-secu-beat.sh"
 }
 
+# Create config if it doesn't exist
+create_config() {
+    if [ ! -f "$INSTALL_DIR/config.json" ]; then
+        echo "Creating default configuration..."
+        "$VENV_DIR/bin/python" "$INSTALL_DIR/secu-beat.py" --create-config "$INSTALL_DIR/config.json"
+    else
+        echo "Configuration file already exists: $INSTALL_DIR/config.json"
+    fi
+}
+
 # Main installation
 main() {
     echo "Starting manual installation..."
+    echo "Source directory: $SCRIPT_DIR"
+    echo "Target directory: $INSTALL_DIR"
     
     check_python
     copy_files
     setup_venv
     create_wrapper
+    create_config
     
     echo
     echo "=== Manual Installation Complete ==="
@@ -85,6 +120,10 @@ main() {
     echo
     echo "Direct Python usage:"
     echo "  $VENV_DIR/bin/python $INSTALL_DIR/secu-beat.py --help"
+    echo
+    echo "Test the installation:"
+    echo "  $INSTALL_DIR/run-secu-beat.sh --version"
+    echo "  $INSTALL_DIR/run-secu-beat.sh --create-config test-config.json"
     echo
     echo "Note: For full functionality, you need:"
     echo "  1. auditd package installed (sudo apt install auditd)"

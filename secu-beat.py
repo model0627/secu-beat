@@ -83,8 +83,13 @@ class SecuBeat:
         console_handler.setFormatter(formatter)
         
         # File handler
-        file_handler = logging.FileHandler(log_dir / "secu-beat.log")
-        file_handler.setFormatter(formatter)
+        try:
+            file_handler = logging.FileHandler(log_dir / "secu-beat.log")
+            file_handler.setFormatter(formatter)
+        except PermissionError:
+            # Fallback to local directory
+            file_handler = logging.FileHandler("./secu-beat.log")
+            file_handler.setFormatter(formatter)
         
         # Configure root logger
         logger = logging.getLogger()
@@ -94,26 +99,33 @@ class SecuBeat:
     
     def _check_prerequisites(self) -> bool:
         """Check system prerequisites"""
+        warnings = []
         errors = []
         
         # Check if running as root
         if self.config.require_root and os.geteuid() != 0:
-            errors.append("SecuBeat requires root privileges to access audit logs")
+            warnings.append("SecuBeat is not running as root - will use demo mode for testing")
+            warnings.append("For full audit functionality, run with: sudo " + " ".join(sys.argv))
         
         # Check if auditd is available
         if not os.path.exists('/sbin/auditctl') and not os.path.exists('/usr/sbin/auditctl'):
-            errors.append("auditctl not found. Please install auditd package")
+            warnings.append("auditctl not found - audit rules cannot be configured")
+            warnings.append("Install with: sudo apt install auditd (Ubuntu/Debian) or sudo yum install audit (CentOS/RHEL)")
         
         # Check if ausearch is available
         if not os.path.exists('/sbin/ausearch') and not os.path.exists('/usr/sbin/ausearch'):
-            errors.append("ausearch not found. Please install auditd package")
+            warnings.append("ausearch not found - will run in demo mode")
         
-        if errors:
-            for error in errors:
-                logging.error(error)
-            return False
+        # Log warnings
+        for warning in warnings:
+            logging.warning(warning)
         
-        return True
+        # Log errors (if any)
+        for error in errors:
+            logging.error(error)
+        
+        # Only fail if there are actual errors (not warnings)
+        return len(errors) == 0
     
     def start(self):
         """Start SecuBeat monitoring"""
@@ -134,6 +146,15 @@ class SecuBeat:
             self.command_tracker.start_tracking()
             
             self.running = True
+            
+            # Show startup message
+            if os.geteuid() != 0:
+                print("\n" + "="*60)
+                print("🚨 DEMO MODE - SecuBeat is running without root privileges")
+                print("   Showing simulated SSH command events for demonstration")
+                print("   For real audit monitoring, run with: sudo")
+                print("="*60 + "\n")
+            
             logging.info("SecuBeat started successfully")
             
             # Main monitoring loop
@@ -217,6 +238,8 @@ class SecuBeat:
             'running': self.running,
             'timestamp': datetime.now().isoformat(),
             'config_path': self.config_manager.config_path,
+            'root_mode': os.geteuid() == 0,
+            'demo_mode': os.geteuid() != 0,
         }
         
         if self.network_sender:
@@ -239,6 +262,9 @@ Examples:
   %(prog)s --output server --server-url http://example.com/api/logs
   %(prog)s --config /etc/secu-beat/config.json
   %(prog)s --create-config /etc/secu-beat/config.json
+  
+Note: Run with 'sudo' for full audit functionality. Without root privileges,
+      the program will run in demo mode for testing purposes.
         """
     )
     
@@ -292,6 +318,12 @@ Examples:
     )
     
     parser.add_argument(
+        '--demo',
+        action='store_true',
+        help='Force demo mode (useful for testing without root)'
+    )
+    
+    parser.add_argument(
         '--version',
         action='version',
         version='SecuBeat 1.0.0'
@@ -329,6 +361,8 @@ def main():
         secu_beat.config.log_level = args.log_level
     if args.json_output:
         secu_beat.config.json_output = True
+    if args.demo:
+        secu_beat.config.require_root = False
     
     # Handle status request
     if args.status:

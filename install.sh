@@ -8,6 +8,7 @@ INSTALL_DIR="/opt/secu-beat"
 CONFIG_DIR="/etc/secu-beat"
 SERVICE_FILE="/etc/systemd/system/secu-beat.service"
 BIN_LINK="/usr/local/bin/secu-beat"
+VENV_DIR="$INSTALL_DIR/venv"
 
 echo "=== SecuBeat Installation Script ==="
 echo "This script will install SecuBeat to monitor SSH command execution."
@@ -41,18 +42,19 @@ install_dependencies() {
     case $DISTRO in
         "ubuntu"|"debian")
             apt-get update
-            apt-get install -y python3 python3-pip auditd audispd-plugins
+            apt-get install -y python3 python3-pip python3-venv python3-full auditd audispd-plugins
             ;;
         "centos"|"rhel"|"fedora")
             if command -v dnf &> /dev/null; then
-                dnf install -y python3 python3-pip audit audispd-plugins
+                dnf install -y python3 python3-pip python3-venv audit audispd-plugins
             else
-                yum install -y python3 python3-pip audit audispd-plugins
+                yum install -y python3 python3-pip python3-venv audit audispd-plugins
             fi
             ;;
         *)
             echo "Warning: Unknown distribution. Please install manually:"
             echo "  - Python 3.6+"
+            echo "  - python3-venv"
             echo "  - auditd package"
             echo "  - pip for Python 3"
             read -p "Continue anyway? [y/N] " -n 1 -r
@@ -64,10 +66,14 @@ install_dependencies() {
     esac
 }
 
-# Install Python dependencies
+# Create virtual environment and install Python dependencies
 install_python_deps() {
-    echo "Installing Python dependencies..."
-    python3 -m pip install -r "$SCRIPT_DIR/requirements.txt"
+    echo "Creating Python virtual environment..."
+    python3 -m venv "$VENV_DIR"
+    
+    echo "Installing Python dependencies in virtual environment..."
+    "$VENV_DIR/bin/pip" install --upgrade pip
+    "$VENV_DIR/bin/pip" install -r "$SCRIPT_DIR/requirements.txt"
 }
 
 # Create directories
@@ -94,7 +100,7 @@ copy_files() {
 create_config() {
     echo "Creating configuration..."
     if [ ! -f "$CONFIG_DIR/config.json" ]; then
-        python3 "$INSTALL_DIR/secu-beat.py" --create-config "$CONFIG_DIR/config.json"
+        "$VENV_DIR/bin/python" "$INSTALL_DIR/secu-beat.py" --create-config "$CONFIG_DIR/config.json"
         echo "Default configuration created at $CONFIG_DIR/config.json"
         echo "Please edit this file to match your requirements."
     else
@@ -115,7 +121,7 @@ Wants=auditd.service
 Type=simple
 User=root
 Group=root
-ExecStart=$INSTALL_DIR/secu-beat.py --config $CONFIG_DIR/config.json
+ExecStart=$VENV_DIR/bin/python $INSTALL_DIR/secu-beat.py --config $CONFIG_DIR/config.json
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -136,10 +142,16 @@ EOF
     systemctl enable secu-beat
 }
 
-# Create binary symlink
-create_symlink() {
-    echo "Creating binary symlink..."
-    ln -sf "$INSTALL_DIR/secu-beat.py" "$BIN_LINK"
+# Create binary wrapper script
+create_wrapper() {
+    echo "Creating wrapper script..."
+    cat > "$BIN_LINK" << EOF
+#!/bin/bash
+# SecuBeat wrapper script
+exec $VENV_DIR/bin/python $INSTALL_DIR/secu-beat.py "\$@"
+EOF
+    
+    chmod +x "$BIN_LINK"
 }
 
 # Configure auditd
@@ -182,12 +194,12 @@ main() {
     echo "Detected distribution: $DISTRO"
     
     install_dependencies
-    install_python_deps
     create_directories
     copy_files
+    install_python_deps
     create_config
     create_service
-    create_symlink
+    create_wrapper
     configure_auditd
     
     echo
@@ -197,10 +209,11 @@ main() {
     echo
     echo "Installation details:"
     echo "  Installation directory: $INSTALL_DIR"
+    echo "  Virtual environment: $VENV_DIR"
     echo "  Configuration file: $CONFIG_DIR/config.json"
     echo "  Log directory: /var/log/secu-beat"
     echo "  Service file: $SERVICE_FILE"
-    echo "  Binary symlink: $BIN_LINK"
+    echo "  Binary wrapper: $BIN_LINK"
     echo
     echo "Next steps:"
     echo "  1. Edit the configuration file: $CONFIG_DIR/config.json"
@@ -212,6 +225,9 @@ main() {
     echo "  secu-beat --help"
     echo "  secu-beat --output console"
     echo "  secu-beat --status"
+    echo
+    echo "Or use the virtual environment directly:"
+    echo "  $VENV_DIR/bin/python $INSTALL_DIR/secu-beat.py --help"
     echo
     
     # Ask if user wants to start the service now

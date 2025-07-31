@@ -18,35 +18,79 @@
 
 ## 설치 방법
 
+### 1. 자동 설치 (권장)
+
 ```bash
 # 저장소 클론
 git clone <repository-url>
 cd secu-beat
 
-# 설치 스크립트 실행 (root 권한 필요)
+# 자동 설치 스크립트 실행 (root 권한 필요)
 sudo ./install.sh
+```
 
-# 또는 수동 설치
-sudo python3 -m pip install -r requirements.txt
-sudo cp secu-beat.service /etc/systemd/system/
-sudo systemctl enable secu-beat
+이 방법은 다음을 자동으로 수행합니다:
+- 시스템 의존성 설치 (auditd, python3-venv 등)
+- Python 가상환경 생성
+- SecuBeat 설치 및 설정
+- systemd 서비스 등록
+- audit 규칙 설정
+
+### 2. 수동/개발용 설치
+
+```bash
+# 일반 사용자 권한으로 홈 디렉토리에 설치
+./manual-install.sh
+```
+
+### 3. 기존 방식 (externally-managed-environment 에러 해결)
+
+최신 우분투/데비안에서 발생하는 `externally-managed-environment` 에러를 해결했습니다:
+
+```bash
+# 가상환경을 사용한 수동 설치
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 또는 시스템 패키지 강제 설치 (권장하지 않음)
+sudo pip install -r requirements.txt --break-system-packages
 ```
 
 ## 사용법
 
 ### 1. 콘솔 출력 모드
 ```bash
-sudo python3 secu-beat.py --output console
+# 자동 설치 후
+sudo secu-beat --output console
+
+# 수동 설치 후
+sudo ~/secu-beat/run-secu-beat.sh --output console
 ```
 
 ### 2. 관리서버 전송 모드
 ```bash
-sudo python3 secu-beat.py --output server --server-url http://your-server.com/api/logs
+sudo secu-beat --output server --server-url http://your-server.com/api/logs
 ```
 
 ### 3. 설정 파일 사용
 ```bash
-sudo python3 secu-beat.py --config /etc/secu-beat/config.json
+sudo secu-beat --config /etc/secu-beat/config.json
+```
+
+### 4. 서비스로 실행
+```bash
+# 서비스 시작
+sudo systemctl start secu-beat
+
+# 서비스 상태 확인
+sudo systemctl status secu-beat
+
+# 로그 확인
+sudo journalctl -u secu-beat -f
+
+# 부팅 시 자동 시작 설정
+sudo systemctl enable secu-beat
 ```
 
 ## 설정
@@ -65,7 +109,22 @@ sudo python3 secu-beat.py --config /etc/secu-beat/config.json
 }
 ```
 
+### 환경변수를 통한 설정
+
+```bash
+export SECUBEAT_OUTPUT_MODE=server
+export SECUBEAT_SERVER_URL=https://your-server.com/api/logs
+export SECUBEAT_SERVER_TOKEN=your-token
+sudo -E secu-beat
+```
+
 ## 출력 형식
+
+### 콘솔 출력 (컬러)
+```
+[2024-01-15T10:30:45Z] john@192.168.1.100 $ cat /etc/passwd (exit: 0)
+[2024-01-15T10:30:47Z] admin@192.168.1.50 $ sudo systemctl restart nginx (exit: 0)
+```
 
 ### JSON 형식
 ```json
@@ -79,6 +138,53 @@ sudo python3 secu-beat.py --config /etc/secu-beat/config.json
   "session_id": "pts/0",
   "pid": 1234
 }
+```
+
+## 관리서버 예제
+
+프로젝트에 포함된 Flask 기반 관리서버:
+
+```bash
+cd examples/
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements-server.txt
+python3 management-server.py
+```
+
+## 문제 해결
+
+### 1. externally-managed-environment 에러
+```bash
+# 해결책 1: 자동 설치 스크립트 사용 (가상환경 자동 생성)
+sudo ./install.sh
+
+# 해결책 2: 수동으로 가상환경 생성
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2. audit 로그 접근 권한 에러
+```bash
+# auditd 서비스 확인
+sudo systemctl status auditd
+
+# audit 규칙 확인
+sudo auditctl -l
+
+# 로그 파일 권한 확인
+sudo ls -la /var/log/audit/
+```
+
+### 3. 의존성 설치 에러
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install python3-venv python3-full auditd
+
+# CentOS/RHEL
+sudo yum install python3-venv audit
 ```
 
 ## 라이선스
